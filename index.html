@@ -1,12 +1,8 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
-    
-    </head>
-<head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>信息协同数据校对助手</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
@@ -52,9 +48,10 @@
             flex-direction: column;
             justify-content: center; 
             align-items: center;
-            /* 加上一层半透明暗色遮罩和背景模糊，让文字更清晰 */
             background: rgba(18, 18, 18, 0.5);
             backdrop-filter: blur(5px);
+            padding: 20px;
+            text-align: center;
         }
         
         .main-title {
@@ -77,7 +74,7 @@
             justify-content: center; 
             align-items: center;
             background: rgba(30, 30, 30, 0.6); 
-            backdrop-filter: blur(10px); /* 拖拽区毛玻璃效果 */
+            backdrop-filter: blur(10px); 
             font-size: 18px; 
             color: var(--text-main);
             cursor: pointer;
@@ -117,8 +114,9 @@
             flex-direction: column;
             padding: 20px; 
             gap: 15px;
-            /* 看板整体也加一点遮罩，烘托质感 */
             background: rgba(10, 10, 10, 0.3);
+            /* 保证高度能铺满 */
+            height: 100%;
         }
 
         .top-nav {
@@ -154,7 +152,6 @@
         }
 
         .panel {
-            /* 将实色面板改为半透明，配合背景形成亚克力玻璃质感 */
             background: rgba(25, 25, 25, 0.75);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
@@ -182,15 +179,18 @@
             padding: 12px;
             overflow: hidden;
             position: relative;
+            display: flex;
+            flex-direction: column;
         }
 
         .left-panel { flex: 0 0 320px; }
-        .center-panel { flex: 1; }
+        .center-panel { flex: 1; min-height: 300px; }
         .right-panel { flex: 0 0 280px; }
 
         textarea {
             width: 100%; 
             height: 100%; 
+            flex: 1;
             background: transparent; 
             color: var(--text-main);
             border: none; 
@@ -201,7 +201,7 @@
             line-height: 1.6;
         }
 
-        #chart-container { width: 100%; height: 100%; }
+        #chart-container { width: 100%; height: 100%; flex: 1; }
 
         /* ================= 按钮及交互 ================= */
         .bottom-bar {
@@ -250,6 +250,64 @@
             border-color: var(--text-muted);
             box-shadow: none;
         }
+
+        /* ================= 响应式布局 (适配移动端小屏) ================= */
+        @media (max-width: 768px) {
+            body {
+                height: auto;
+                min-height: 100vh;
+                overflow-y: auto; /* 允许竖向滚动 */
+            }
+
+            .main-title {
+                font-size: 24px; /* 缩小标题 */
+                margin-bottom: 20px;
+            }
+
+            .drop-area {
+                width: 90%;
+                height: 200px;
+                font-size: 16px;
+            }
+
+            #dashboard-view {
+                height: auto; /* 取消高度限制 */
+                overflow-y: visible;
+                padding: 15px 10px;
+            }
+
+            .top-nav {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .btn-back {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .main-split {
+                flex-direction: column; /* 改为纵向排列 */
+                gap: 15px;
+            }
+
+            .left-panel, .right-panel {
+                flex: none;
+                width: 100%;
+                height: 300px; /* 给定固定高度 */
+            }
+
+            .center-panel {
+                flex: none;
+                width: 100%;
+                height: 400px; /* 图表区稍微给高一点 */
+            }
+
+            .bottom-bar button {
+                width: 100%; /* 导出按钮满宽 */
+            }
+        }
     </style>
 </head>
 <body>
@@ -260,8 +318,8 @@
         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
         </svg>
-        <div>拖入 XLSX 报价表进行逻辑校验</div>
-        <div class="drop-subtext">(或点击此处选择文件)</div>
+        <div>拖入 / 点击选择 XLSX 报价表</div>
+        <div class="drop-subtext">(支持移动端点击文件选取)</div>
     </div>
     <input type="file" id="fileInput" accept=".xlsx" style="display: none;">
 </div>
@@ -392,7 +450,6 @@
                 roundPricesMap[i][company] = currPrice;
 
                 if (prevPrice !== null && prevRoundName !== null) {
-                    // 涨价异常
                     if (currPrice > prevPrice) {
                         globalErrors.push(`【涨价异常】${company}\n    ${ROUNDS[i]}(${currPrice}) 高于上一轮(${prevPrice})`);
                         flaggedCompanies.add(company);
@@ -473,7 +530,6 @@
         let list = Object.entries(companyPrices).sort((a, b) => a[1] - b[1]);
         let n = list.length;
 
-        // 1. 常规等差等比 (升序)
         for (let i = 0; i < n - 2; i++) {
             for (let j = i + 1; j < n - 1; j++) {
                 let p1 = list[i][1], p2 = list[j][1];
@@ -518,7 +574,6 @@
             }
         }
 
-        // 2. 独立差值等比 (降序)
         let descList = Object.entries(companyPrices).sort((a, b) => b[1] - a[1]);
         for (let i = 0; i < n - 3; i++) {
             for (let j = i + 1; j < n - 2; j++) {
@@ -556,7 +611,6 @@
         document.getElementById('init-view').style.display = 'none';
         document.getElementById('dashboard-view').style.display = 'flex';
 
-        // 渲染文本数据
         document.getElementById('logArea').value = errors.length > 0 ? errors.join("\n\n") : "未发现明显异常数据。";
         let detailStr = "";
         for (let comp in dropData) {
@@ -568,7 +622,6 @@
         }
         document.getElementById('detailArea').value = detailStr;
 
-        // 渲染图表
         renderChart(priceData);
     }
 
@@ -576,13 +629,10 @@
         const dom = document.getElementById('chart-container');
         if (chartInstance) chartInstance.dispose();
         
-        // 渲染背景设置为透明，以免遮挡卡片的亚克力效果
         chartInstance = echarts.init(dom, 'dark');
 
         let allRounds = new Set();
         let series = [];
-        
-        // --- 动态计算全局最大值与最小值 ---
         let minPrice = Infinity;
         let maxPrice = -Infinity;
 
@@ -594,7 +644,6 @@
             });
         }
         
-        // 处理边界情况（以防数据异常或者全平）
         if (minPrice === Infinity || maxPrice === -Infinity) {
             minPrice = 0; maxPrice = 100;
         } else if (minPrice === maxPrice) {
@@ -602,10 +651,7 @@
             maxPrice = maxPrice + 10;
         }
         
-        // 算出五等分的步长
         let yInterval = (maxPrice - minPrice) / 5;
-        // ----------------------------------------
-
         let xAxisData = Array.from(allRounds).sort((a,b) => ROUNDS.indexOf(a) - ROUNDS.indexOf(b));
 
         for (let comp in priceData) {
@@ -623,23 +669,35 @@
             });
         }
 
+        // 判断是否为移动端尺寸
+        let isMobile = window.innerWidth <= 768;
+
         const option = {
             backgroundColor: 'transparent',
             tooltip: { 
                 trigger: 'item', 
                 backgroundColor: 'rgba(25, 25, 25, 0.9)',
                 borderColor: '#444',
-                textStyle: { color: '#EEE' },
+                textStyle: { color: '#EEE', fontSize: isMobile ? 12 : 14 },
                 formatter: '{a} <br/>{b} : <b>{c}</b> 万元' 
             },
             legend: { 
                 type: 'scroll', 
-                orient: 'vertical', 
-                right: 0, 
-                top: 10, 
-                textStyle: { color: '#B0B0B0', fontSize: 12 }
+                // 移动端图例放顶部并横向排列，桌面端放右侧
+                orient: isMobile ? 'horizontal' : 'vertical', 
+                right: isMobile ? 'center' : 0, 
+                top: isMobile ? 0 : 10, 
+                textStyle: { color: '#B0B0B0', fontSize: 12 },
+                width: isMobile ? '90%' : 'auto'
             },
-            grid: { left: '2%', right: '18%', bottom: '2%', top: '8%', containLabel: true },
+            // 移动端因为图例在顶部，需要给 top 留出更多空间，右侧留白减少
+            grid: { 
+                left: '2%', 
+                right: isMobile ? '5%' : '18%', 
+                bottom: '2%', 
+                top: isMobile ? '15%' : '8%', 
+                containLabel: true 
+            },
             dataZoom: [
                 { type: 'inside', xAxisIndex: 0 },
                 { type: 'inside', yAxisIndex: 0 }
@@ -649,7 +707,7 @@
                 boundaryGap: false, 
                 data: xAxisData,
                 axisLine: { lineStyle: { color: '#555' } },
-                axisLabel: { color: '#B0B0B0' }
+                axisLabel: { color: '#B0B0B0', fontSize: isMobile ? 10 : 12 }
             },
             yAxis: { 
                 type: 'value',
@@ -660,6 +718,7 @@
                 splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)', type: 'dashed' } },
                 axisLabel: { 
                     color: '#B0B0B0',
+                    fontSize: isMobile ? 10 : 12,
                     formatter: function (value) {
                         return value.toFixed(2);
                     }
@@ -670,10 +729,27 @@
         };
         chartInstance.setOption(option);
         
-        window.addEventListener('resize', () => chartInstance.resize());
+        window.addEventListener('resize', () => {
+            if(chartInstance) {
+                // 动态更新图例和 grid 位置
+                let newIsMobile = window.innerWidth <= 768;
+                chartInstance.setOption({
+                    legend: {
+                        orient: newIsMobile ? 'horizontal' : 'vertical',
+                        right: newIsMobile ? 'center' : 0,
+                        top: newIsMobile ? 0 : 10,
+                        width: newIsMobile ? '90%' : 'auto'
+                    },
+                    grid: {
+                        right: newIsMobile ? '5%' : '18%',
+                        top: newIsMobile ? '15%' : '8%',
+                    }
+                });
+                chartInstance.resize();
+            }
+        });
     }
 
-    // 纯文本报告导出
     function exportReport() {
         const ts = new Date().getTime();
         
